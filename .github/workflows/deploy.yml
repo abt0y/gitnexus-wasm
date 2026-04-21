@@ -112,7 +112,7 @@ jobs:
 
           # Verify build
           ls -la dist/
-          ls -la dist/pkg/
+          ls -la dist/assets/
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
