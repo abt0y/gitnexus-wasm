@@ -81,10 +81,10 @@ impl GitNexus {
         engine.graph = Some(graph);
         engine.embedder = Some(EmbeddingEngine::new());
 
-        Ok(JsResult::ok(&serde_json::json!({
+        Ok(JsResult::ok(serde_json::json!({
             "status": "ready",
             "version": env!("CARGO_PKG_VERSION")
-        })))
+        }).to_string()))
     }
 
     // ========================================================================
@@ -118,10 +118,10 @@ impl GitNexus {
 
         self.engine.write().current_repo = Some(repo);
 
-        Ok(JsResult::ok(&serde_json::json!({
+        Ok(JsResult::ok(serde_json::json!({
             "name": repo_name,
             "fileCount": self.engine.read().current_repo.as_ref().map(|r| r.files.len()).unwrap_or(0),
-        })))
+        }).to_string()))
     }
 
     async fn read_directory_recursive(
@@ -241,9 +241,21 @@ impl GitNexus {
                  serde_wasm_bindgen::to_value(&q.embedding).unwrap(),
                  q.limit.unwrap_or(10)
              ).await?;
-             Ok(JsResult::ok(&results))
+             Ok(results)
         } else {
              graph.search(serde_wasm_bindgen::to_value(&q).unwrap()).await
         }
+    }
+
+    pub async fn export_graph(&self) -> Result<String, JsValue> {
+        let engine = self.engine.read();
+        let graph = engine.graph.as_ref().ok_or_else(|| JsValue::from_str("No graph"))?;
+        graph.export().await
+    }
+
+    pub async fn context(&self, name: String, uid: Option<String>) -> Result<JsResult, JsValue> {
+        let engine = self.engine.read();
+        let graph = engine.graph.as_ref().ok_or_else(|| JsValue::from_str("No graph"))?;
+        graph.get_context(name, uid).await
     }
 }
