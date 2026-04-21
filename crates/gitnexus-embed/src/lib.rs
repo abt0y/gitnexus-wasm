@@ -359,7 +359,7 @@ impl EmbeddingPipeline {
             let _ = callback.call1(&JsValue::NULL, &serde_wasm_bindgen::to_value(&progress).unwrap());
         }
 
-        Ok(JsResult::ok(&serde_json::json!({"processed": processed})))
+        Ok(JsResult::ok(serde_json::json!({"processed": processed}).to_string()))
     }
 
     pub fn is_ready(&self) -> bool {

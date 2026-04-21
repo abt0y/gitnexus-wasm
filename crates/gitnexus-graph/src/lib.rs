@@ -151,6 +151,9 @@ impl GraphDatabase {
                         serde_json::Number::from_f64(val.as_f64().unwrap_or(0.0))
                             .unwrap_or(serde_json::Number::from(0)),
                     )
+                } else if val.is_number() {
+                     // Handled by Number above but just in case
+                     serde_json::Value::Number(serde_json::Number::from_f64(val.as_f64().unwrap_or(0.0)).unwrap_or(serde_json::Number::from(0)))
                 } else if val.is_boolean() {
                     serde_json::Value::Bool(val.as_bool().unwrap_or(false))
                 } else if val.is_null() || val.is_undefined() {
@@ -255,7 +258,7 @@ impl GraphDatabase {
         }).collect();
 
         if edges.is_empty() {
-            return Ok(JsResult::err("No edges found — run analysis first"));
+            return Ok(JsResult::err("No edges found — run analysis first".to_string()));
         }
 
         let result = detect_communities(&edges, &config);
@@ -282,11 +285,11 @@ impl GraphDatabase {
             ).await;
         }
 
-        Ok(JsResult::ok(&serde_json::json!({
+        Ok(JsResult::ok(serde_json::json!({
             "modularity":  result.modularity,
             "communities": result.community_stats.len(),
             "levels":      result.levels,
-        })))
+        }).to_string()))
     }
 
     pub async fn extract_processes(&self, config_js: JsValue) -> Result<JsResult, JsValue> {
@@ -336,7 +339,7 @@ impl GraphDatabase {
             }
         }
 
-        Ok(JsResult::ok(&serde_json::json!({ "processes": count })))
+        Ok(JsResult::ok(serde_json::json!({ "processes": count }).to_string()))
     }
 
     pub fn index_embedding(&mut self, entry_js: JsValue) -> Result<(), JsValue> {
@@ -346,20 +349,12 @@ impl GraphDatabase {
         Ok(())
     }
 
-    pub fn semantic_search(&self, embedding_js: JsValue, k: u32) -> Result<JsValue, JsValue> {
-        let embedding: Vec<f32> = serde_wasm_bindgen::from_value(embedding_js)
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let results = self.vector_index.search(&embedding, k as usize);
-        serde_wasm_bindgen::to_value(&results)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
-    }
-
     pub async fn hybrid_search(
         &self,
         keyword:      &str,
         embedding_js: JsValue,
         k:            u32,
-    ) -> Result<JsValue, JsValue> {
+    ) -> Result<JsResult, JsValue> {
         let safe = keyword.replace('\'', "''");
         let bm25_q = format!(
             "MATCH (n) WHERE n.name CONTAINS '{0}' OR n.content CONTAINS '{0}' \
@@ -378,8 +373,7 @@ impl GraphDatabase {
 
         let fused = reciprocal_rank_fusion(&bm25_ids, &sem_ids, k as usize);
 
-        serde_wasm_bindgen::to_value(&fused)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(JsResult::ok(serde_json::to_string(&fused).unwrap()))
     }
 
     pub async fn get_full_graph(&self) -> Result<JsValue, JsValue> {
@@ -437,6 +431,35 @@ impl GraphDatabase {
         let v: serde_json::Value = serde_wasm_bindgen::from_value(g)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(serde_json::to_string_pretty(&v).unwrap_or_default())
+    }
+
+    pub async fn search(&self, query_js: JsValue) -> Result<JsResult, JsValue> {
+        let q: SearchQuery = serde_wasm_bindgen::from_value(query_js)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        
+        // Basic keyword search
+        let safe = q.query.replace('\'', "''");
+        let cypher = format!(
+            "MATCH (n) WHERE n.name CONTAINS '{0}' OR n.filePath CONTAINS '{0}' \
+             RETURN n.id AS nodeId, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath \
+             LIMIT {1}",
+            safe, q.limit.unwrap_or(10)
+        );
+        let rows = self.query(&cypher).await?;
+        Ok(JsResult::ok(serde_json::to_string(&rows).unwrap()))
+    }
+
+    pub async fn get_context(&self, name: String, _uid: Option<String>) -> Result<JsResult, JsValue> {
+        let safe = name.replace('\'', "''");
+        let cypher = format!(
+             "MATCH (n {{name: '{}'}}) RETURN n.id AS id, n.name AS name, labels(n)[0] AS kind, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.content AS content",
+             safe
+        );
+        let rows = self.query(&cypher).await?;
+        if rows.is_empty() {
+            return Ok(JsResult::err("Symbol not found".to_string()));
+        }
+        Ok(JsResult::ok(serde_json::to_string(&rows[0]).unwrap()))
     }
 
     pub fn close(&self) -> Result<(), JsValue> {
@@ -523,12 +546,11 @@ impl GraphBuilder {
 
         self.resolve_calls(&files).await?;
 
-        Ok(JsResult::ok(&IndexStats {
-            files: files.len() as u32,
-            nodes: total_nodes,
-            edges: total_rels,
-            ..Default::default()
-        }))
+        Ok(JsResult::ok(serde_json::json!({
+            "files": files.len() as u32,
+            "nodes": total_nodes,
+            "edges": total_rels
+        }).to_string()))
     }
 
     async fn resolve_calls(&self, files: &[ParsedFile]) -> Result<(), JsValue> {
