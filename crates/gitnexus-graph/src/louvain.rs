@@ -6,8 +6,8 @@
 //!
 //! Reference: Blondel et al. (2008), "Fast unfolding of communities in large networks"
 
-
-
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 
 // ============================================================================
