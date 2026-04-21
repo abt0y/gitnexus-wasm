@@ -9,19 +9,16 @@
 //! - Search, impact analysis, and context queries
 
 use wasm_bindgen::prelude::*;
-use js_sys::{Function, Promise, Reflect, Array, Object};
-use web_sys::{console, File, FileList, FileReader, HtmlInputElement, DragEvent, DataTransfer};
-use serde::{Deserialize, Serialize};
+use js_sys::{Promise, Reflect, Object};
+use web_sys::{File, FileReader};
 use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::RwLock;
-use log::{info, warn, error};
+use log::info;
 
 use gitnexus_shared::*;
-use gitnexus_parse::{WasmParser, ParserRegistry, ParsedFile};
+use gitnexus_parse::WasmParser;
 use gitnexus_graph::{GraphDatabase, GraphBuilder};
-use gitnexus_embed::{EmbeddingEngine, EmbeddingPipeline, TextChunker};
-use gitnexus_git::GitRepo;
 
 // ============================================================================
 // Main engine state
@@ -30,17 +27,13 @@ use gitnexus_git::GitRepo;
 pub struct GitNexusEngine {
     parser: WasmParser,
     graph: Option<GraphDatabase>,
-    embedder: Option<EmbeddingEngine>,
+    embedder: Option<serde_json::Value>, // Placeholder for embedding engine logic
     current_repo: Option<RepoState>,
 }
 
 pub struct RepoState {
     name: String,
-    path: String,
     files: Vec<FileEntry>,
-    is_git_repo: bool,
-    git_branch: Option<String>,
-    /// path -> content_hash for incremental updates
     hashes: HashMap<String, String>,
 }
 
@@ -58,7 +51,7 @@ impl GitNexus {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Result<GitNexus, JsValue> {
         console_error_panic_hook::set_once();
-        wasm_logger::init(wasm_logger::Config::default());
+        wasm_logger::init(wasm_logger::Config::new(log::Level::Info));
 
         info!("GitNexus WASM initializing");
 
@@ -75,21 +68,17 @@ impl GitNexus {
     }
 
     pub async fn init(&self) -> Result<JsResult, JsValue> {
-        let mut engine = self.engine.write();
-        engine.parser.init().await?;
-        let graph = GraphDatabase::new(None).await?;
-        engine.graph = Some(graph);
-        engine.embedder = Some(EmbeddingEngine::new());
-
+        // Refactor: parser.init may stay async, but constructors are now static factories
+        self.engine.write().parser.init().await?;
+        
+        let graph = GraphDatabase::open(None).await?;
+        self.engine.write().graph = Some(graph);
+        
         Ok(JsResult::ok(serde_json::json!({
             "status": "ready",
             "version": env!("CARGO_PKG_VERSION")
         }).to_string()))
     }
-
-    // ========================================================================
-    // File System / Repo Import
-    // ========================================================================
 
     pub async fn import_from_handle(&self, handle: JsValue) -> Result<JsResult, JsValue> {
         let dir_handle = Object::from(handle);
@@ -99,7 +88,6 @@ impl GitNexus {
         let repo_name = Reflect::get(&dir_handle, &"name".into())?
             .as_string().unwrap_or_default();
 
-        // Calculate hashes for incremental updates (Task 7)
         let mut hashes = HashMap::new();
         for file in &files {
             if let Some(content) = &file.content {
@@ -109,10 +97,7 @@ impl GitNexus {
 
         let repo = RepoState {
             name: repo_name.clone(),
-            path: "/".to_string(),
             files,
-            is_git_repo: false,
-            git_branch: None,
             hashes,
         };
 
@@ -175,13 +160,13 @@ impl GitNexus {
     }
 
     async fn read_file_text(&self, file: &File) -> Result<String, JsValue> {
-        let promise = Promise::new(&mut |resolve, reject| {
+        let promise = Promise::new(&mut |resolve, _reject| {
             let reader = FileReader::new().unwrap();
             let onload = Closure::once_into_js(move |event: web_sys::ProgressEvent| {
                 let target = event.target().unwrap();
                 let reader: FileReader = target.dyn_into().unwrap();
                 let result = reader.result().unwrap_or(JsValue::NULL);
-                resolve.call1(&JsValue::NULL, &result).unwrap_or(JsValue::NULL);
+                let _ = resolve.call1(&JsValue::NULL, &result);
             });
             reader.set_onload(Some(onload.as_ref().dyn_ref().unwrap()));
             reader.read_as_text(file).unwrap();
@@ -189,10 +174,6 @@ impl GitNexus {
         let result = wasm_bindgen_futures::JsFuture::from(promise).await?;
         Ok(result.as_string().unwrap_or_default())
     }
-
-    // ========================================================================
-    // Parallel Pipeline Integration (Task 2)
-    // ========================================================================
 
     pub fn get_files_for_parsing(&self) -> Result<JsValue, JsValue> {
         let engine = self.engine.read();
@@ -205,10 +186,8 @@ impl GitNexus {
     }
 
     pub async fn ingest_parsed_results(&self, results_js: JsValue) -> Result<JsResult, JsValue> {
-        let mut engine = self.engine.write();
-        let graph = engine.graph.as_mut().ok_or_else(|| JsValue::from_str("No graph"))?;
-        
-        let builder = GraphBuilder::new().await?;
+        // Use static factory
+        let builder = GraphBuilder::create().await?;
         let result = builder.build_from_parsed(results_js).await?;
         Ok(result)
     }
@@ -225,16 +204,11 @@ impl GitNexus {
         graph.extract_processes(config).await
     }
 
-    // ========================================================================
-    // Query Tools
-    // ========================================================================
-
     pub async fn search(&self, query: JsValue) -> Result<JsResult, JsValue> {
         let q: SearchQuery = serde_wasm_bindgen::from_value(query).unwrap();
         let engine = self.engine.read();
         let graph = engine.graph.as_ref().ok_or_else(|| JsValue::from_str("No graph"))?;
         
-        // Full hybrid search (Task 5)
         if q.semantic.unwrap_or(false) && q.embedding.is_some() {
              let results = graph.hybrid_search(
                  &q.query, 

@@ -8,13 +8,10 @@ pub mod process;
 pub mod vector;
 
 use wasm_bindgen::prelude::*;
-use js_sys::{Function, Promise, Reflect, Array, Object};
-use web_sys::console;
+use js_sys::{Promise, Reflect, Array, Object};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use parking_lot::RwLock;
-use log::{info, warn, error};
+use log::{info, warn};
 
 use gitnexus_shared::*;
 use louvain::{LouvainConfig, detect_communities};
@@ -39,8 +36,8 @@ pub struct GraphDatabase {
 
 #[wasm_bindgen]
 impl GraphDatabase {
-    #[wasm_bindgen(constructor)]
-    pub async fn new(db_path: Option<String>) -> Result<GraphDatabase, JsValue> {
+    #[wasm_bindgen]
+    pub async fn open(db_path: Option<String>) -> Result<GraphDatabase, JsValue> {
         console_error_panic_hook::set_once();
 
         let window = web_sys::window().ok_or("No window")?;
@@ -81,172 +78,9 @@ impl GraphDatabase {
         Ok(graph)
     }
 
-    async fn init_schema(&mut self) -> Result<(), JsValue> {
-        if self.schema_initialized { return Ok(()); }
-
-        let stmts = vec![
-            "CREATE NODE TABLE IF NOT EXISTS File(id STRING PRIMARY KEY, name STRING, filePath STRING, content STRING, contentHash STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Folder(id STRING PRIMARY KEY, name STRING, filePath STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Function(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN, parameterCount INT32, returnType STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Class(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN)",
-            "CREATE NODE TABLE IF NOT EXISTS Interface(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN)",
-            "CREATE NODE TABLE IF NOT EXISTS Method(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN, parameterCount INT32, returnType STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Struct(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Enum(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Trait(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Module(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Namespace(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Community(id STRING PRIMARY KEY, label STRING, heuristicLabel STRING, cohesion DOUBLE, symbolCount INT32)",
-            "CREATE NODE TABLE IF NOT EXISTS Process(id STRING PRIMARY KEY, label STRING, heuristicLabel STRING, processType STRING, stepCount INT32, entryPointId STRING, terminalId STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Route(id STRING PRIMARY KEY, name STRING, filePath STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS Tool(id STRING PRIMARY KEY, name STRING, filePath STRING, description STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS CodeElement(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
-            "CREATE NODE TABLE IF NOT EXISTS CodeEmbedding(id STRING PRIMARY KEY, nodeId STRING, chunkIndex INT32, startLine INT32, endLine INT32, contentHash STRING)",
-            "CREATE REL TABLE IF NOT EXISTS CodeRelation(FROM CodeElement TO CodeElement, MANY_MANY, type STRING, confidence DOUBLE)",
-            "CREATE REL TABLE IF NOT EXISTS FileRelation(FROM File TO File, MANY_MANY, type STRING)",
-            "CREATE REL TABLE IF NOT EXISTS MemberOf(FROM CodeElement TO Community, MANY_MANY, confidence DOUBLE)",
-            "CREATE REL TABLE IF NOT EXISTS StepInProcess(FROM CodeElement TO Process, MANY_MANY, step INT32, confidence DOUBLE)",
-            "CREATE REL TABLE IF NOT EXISTS EntryPointOf(FROM CodeElement TO Process, MANY_MANY, confidence DOUBLE)",
-            "CREATE REL TABLE IF NOT EXISTS Defines(FROM File TO CodeElement, ONE_MANY, confidence DOUBLE)",
-            "CREATE REL TABLE IF NOT EXISTS Contains(FROM Folder TO File, ONE_MANY)",
-        ];
-
-        for stmt in stmts {
-            if let Err(e) = self.execute(stmt).await {
-                let msg = e.as_string().unwrap_or_default();
-                if !msg.contains("already exists") {
-                    warn!("Schema: {}", msg);
-                }
-            }
-        }
-
-        self.schema_initialized = true;
-        info!("Schema initialized");
-        Ok(())
-    }
-
-    pub async fn execute(&self, query: &str) -> Result<JsValue, JsValue> {
-        let method: js_sys::Function = Reflect::get(&self.conn, &"query".into())?.dyn_into()?;
-        let promise: Promise = method.call1(&self.conn, &JsValue::from_str(query))?.dyn_into()?;
-        wasm_bindgen_futures::JsFuture::from(promise).await
-    }
-
-    #[wasm_bindgen(skip)]
-    pub async fn query_internal(
-        &self, cypher: &str,
-    ) -> Result<Vec<HashMap<String, serde_json::Value>>, JsValue> {
-        let result = self.execute(cypher).await?;
-        let rows_method: js_sys::Function =
-            Reflect::get(&result, &"getAllRows".into())?.dyn_into()?;
-        let rows_promise: Promise = rows_method.call0(&result)?.dyn_into()?;
-        let rows = wasm_bindgen_futures::JsFuture::from(rows_promise).await?;
-        let rows_array = js_sys::Array::from(&rows);
-        let mut out = Vec::new();
-        for i in 0..rows_array.length() {
-            let row = rows_array.get(i);
-            let row_obj = Object::from(row);
-            let mut map = HashMap::new();
-            for key in Object::keys(&row_obj).iter() {
-                let key_str = key.as_string().unwrap_or_default();
-                let val = Reflect::get(&row_obj, &key.into())?;
-                
-                let jv = if val.is_string() {
-                    serde_json::Value::String(val.as_string().unwrap_or_default())
-                } else if let Some(n) = val.as_f64() {
-                    serde_json::Value::Number(
-                        serde_json::Number::from_f64(n)
-                            .unwrap_or(serde_json::Number::from(0)),
-                    )
-                } else if let Some(b) = val.as_bool() {
-                    serde_json::Value::Bool(b)
-                } else if val.is_null() || val.is_undefined() {
-                    serde_json::Value::Null
-                } else {
-                    let s = js_sys::JSON::stringify(&val)
-                        .map_err(|_| JsValue::from_str("stringify fail"))?
-                        .as_string()
-                        .unwrap_or_else(|| "null".to_string());
-                    serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)
-                };
-                map.insert(key_str, jv);
-            }
-            out.push(map);
-        }
-        Ok(out)
-    }
-
     pub async fn query(&self, cypher: &str) -> Result<JsValue, JsValue> {
         let rows = self.query_internal(cypher).await?;
         serde_wasm_bindgen::to_value(&rows).map_err(|e| JsValue::from_str(&e.to_string()))
-    }
-
-    pub async fn create_node(&self, label: &str, properties: JsValue) -> Result<(), JsValue> {
-        let props: HashMap<String, serde_json::Value> =
-            serde_wasm_bindgen::from_value(properties)
-                .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-        let id = props.get("id").and_then(|v| v.as_str())
-            .ok_or_else(|| JsValue::from_str("Node must have 'id'"))?;
-
-        let sets: Vec<String> = props.iter().filter(|(k, _)| k.as_str() != "id").map(|(k, v)| {
-            let fv = match v {
-                serde_json::Value::String(s)  => format!("'{}'", s.replace('\'', "''")),
-                serde_json::Value::Number(n)  => n.to_string(),
-                serde_json::Value::Bool(b)    => b.to_string(),
-                serde_json::Value::Null       => "NULL".to_string(),
-                other                         => format!("'{}'", other.to_string().replace('\'', "''")),
-            };
-            format!("n.{} = {}", k, fv)
-        }).collect();
-
-        let query = if sets.is_empty() {
-            format!("MERGE (n:{} {{id: '{}'}})", label, id.replace('\'', "''"))
-        } else {
-            format!(
-                "MERGE (n:{} {{id: '{}'}}) ON CREATE SET {} ON MATCH SET {}",
-                label,
-                id.replace('\'', "''"),
-                sets.join(", "),
-                sets.join(", "),
-            )
-        };
-
-        self.execute(&query).await?;
-        Ok(())
-    }
-
-    pub async fn create_relationship(
-        &self,
-        from_id: &str,
-        to_id:   &str,
-        rel:     &str,
-        props:   Option<JsValue>,
-    ) -> Result<(), JsValue> {
-        let mut q = format!(
-            "MATCH (a), (b) WHERE a.id = '{}' AND b.id = '{}' MERGE (a)-[r:{}]->(b)",
-            from_id.replace('\'', "''"),
-            to_id.replace('\'', "''"),
-            rel,
-        );
-        if let Some(p) = props {
-            let pm: HashMap<String, serde_json::Value> =
-                serde_wasm_bindgen::from_value(p)
-                    .map_err(|e| JsValue::from_str(&e.to_string()))?;
-            let sets: Vec<String> = pm.iter().map(|(k, v)| {
-                let fv = match v {
-                    serde_json::Value::String(s)  => format!("'{}'", s.replace('\'', "''")),
-                    serde_json::Value::Number(n)  => n.to_string(),
-                    serde_json::Value::Bool(b)    => b.to_string(),
-                    _                             => "NULL".to_string(),
-                };
-                format!("r.{} = {}", k, fv)
-            }).collect();
-            if !sets.is_empty() {
-                q.push_str(&format!(" ON CREATE SET {} ON MATCH SET {}", sets.join(", "), sets.join(", ")));
-            }
-        }
-        self.execute(&q).await?;
-        Ok(())
     }
 
     pub async fn detect_communities(&self, config_js: JsValue) -> Result<JsResult, JsValue> {
@@ -445,7 +279,6 @@ impl GraphDatabase {
         let q: SearchQuery = serde_wasm_bindgen::from_value(query_js)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         
-        // Basic keyword search
         let safe = q.query.replace('\'', "''");
         let cypher = format!(
             "MATCH (n) WHERE n.name CONTAINS '{0}' OR n.filePath CONTAINS '{0}' \
@@ -483,6 +316,165 @@ impl GraphDatabase {
     }
 }
 
+// Internal methods for GraphDatabase
+impl GraphDatabase {
+    async fn init_schema(&mut self) -> Result<(), JsValue> {
+        if self.schema_initialized { return Ok(()); }
+
+        let stmts = vec![
+            "CREATE NODE TABLE IF NOT EXISTS File(id STRING PRIMARY KEY, name STRING, filePath STRING, content STRING, contentHash STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Folder(id STRING PRIMARY KEY, name STRING, filePath STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Function(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN, parameterCount INT32, returnType STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Class(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN)",
+            "CREATE NODE TABLE IF NOT EXISTS Interface(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN)",
+            "CREATE NODE TABLE IF NOT EXISTS Method(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING, isExported BOOLEAN, parameterCount INT32, returnType STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Struct(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Enum(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Trait(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Module(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Namespace(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Community(id STRING PRIMARY KEY, label STRING, heuristicLabel STRING, cohesion DOUBLE, symbolCount INT32)",
+            "CREATE NODE TABLE IF NOT EXISTS Process(id STRING PRIMARY KEY, label STRING, heuristicLabel STRING, processType STRING, stepCount INT32, entryPointId STRING, terminalId STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Route(id STRING PRIMARY KEY, name STRING, filePath STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS Tool(id STRING PRIMARY KEY, name STRING, filePath STRING, description STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS CodeElement(id STRING PRIMARY KEY, name STRING, filePath STRING, startLine INT32, endLine INT32, content STRING)",
+            "CREATE NODE TABLE IF NOT EXISTS CodeEmbedding(id STRING PRIMARY KEY, nodeId STRING, chunkIndex INT32, startLine INT32, endLine INT32, contentHash STRING)",
+            "CREATE REL TABLE IF NOT EXISTS CodeRelation(FROM CodeElement TO CodeElement, MANY_MANY, type STRING, confidence DOUBLE)",
+            "CREATE REL TABLE IF NOT EXISTS FileRelation(FROM File TO File, MANY_MANY, type STRING)",
+            "CREATE REL TABLE IF NOT EXISTS MemberOf(FROM CodeElement TO Community, MANY_MANY, confidence DOUBLE)",
+            "CREATE REL TABLE IF NOT EXISTS StepInProcess(FROM CodeElement TO Process, MANY_MANY, step INT32, confidence DOUBLE)",
+            "CREATE REL TABLE IF NOT EXISTS EntryPointOf(FROM CodeElement TO Process, MANY_MANY, confidence DOUBLE)",
+            "CREATE REL TABLE IF NOT EXISTS Defines(FROM File TO CodeElement, ONE_MANY, confidence DOUBLE)",
+            "CREATE REL TABLE IF NOT EXISTS Contains(FROM Folder TO File, ONE_MANY)",
+        ];
+
+        for stmt in stmts {
+            let _ = self.execute(stmt).await;
+        }
+
+        self.schema_initialized = true;
+        Ok(())
+    }
+
+    async fn execute(&self, query: &str) -> Result<JsValue, JsValue> {
+        let method: js_sys::Function = Reflect::get(&self.conn, &"query".into())?.dyn_into()?;
+        let promise: Promise = method.call1(&self.conn, &JsValue::from_str(query))?.dyn_into()?;
+        wasm_bindgen_futures::JsFuture::from(promise).await
+    }
+
+    async fn query_internal(
+        &self, cypher: &str,
+    ) -> Result<Vec<HashMap<String, serde_json::Value>>, JsValue> {
+        let result = self.execute(cypher).await?;
+        let rows_method: js_sys::Function =
+            Reflect::get(&result, &"getAllRows".into())?.dyn_into()?;
+        let rows_promise: Promise = rows_method.call0(&result)?.dyn_into()?;
+        let rows = wasm_bindgen_futures::JsFuture::from(rows_promise).await?;
+        let rows_array = js_sys::Array::from(&rows);
+        let mut out = Vec::new();
+        for i in 0..rows_array.length() {
+            let row = rows_array.get(i);
+            let row_obj = Object::from(row);
+            let mut map = HashMap::new();
+            for key in Object::keys(&row_obj).iter() {
+                let key_str = key.as_string().unwrap_or_default();
+                let val = Reflect::get(&row_obj, &key.into())?;
+                
+                let jv = if val.is_string() {
+                    serde_json::Value::String(val.as_string().unwrap_or_default())
+                } else if let Some(n) = val.as_f64() {
+                    serde_json::Value::Number(
+                        serde_json::Number::from_f64(n)
+                            .unwrap_or(serde_json::Number::from(0)),
+                    )
+                } else if let Some(b) = val.as_bool() {
+                    serde_json::Value::Bool(b)
+                } else if val.is_null() || val.is_undefined() {
+                    serde_json::Value::Null
+                } else {
+                    let s = js_sys::JSON::stringify(&val)
+                        .map_err(|_| JsValue::from_str("stringify fail"))?
+                        .as_string()
+                        .unwrap_or_else(|| "null".to_string());
+                    serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)
+                };
+                map.insert(key_str, jv);
+            }
+            out.push(map);
+        }
+        Ok(out)
+    }
+
+    async fn create_node(&self, label: &str, properties: JsValue) -> Result<(), JsValue> {
+        let props: HashMap<String, serde_json::Value> =
+            serde_wasm_bindgen::from_value(properties)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        let id = props.get("id").and_then(|v| v.as_str())
+            .ok_or_else(|| JsValue::from_str("Node must have 'id'"))?;
+
+        let sets: Vec<String> = props.iter().filter(|(k, _)| k.as_str() != "id").map(|(k, v)| {
+            let fv = match v {
+                serde_json::Value::String(s)  => format!("'{}'", s.replace('\'', "''")),
+                serde_json::Value::Number(n)  => n.to_string(),
+                serde_json::Value::Bool(b)    => b.to_string(),
+                serde_json::Value::Null       => "NULL".to_string(),
+                other                         => format!("'{}'", other.to_string().replace('\'', "''")),
+            };
+            format!("n.{} = {}", k, fv)
+        }).collect();
+
+        let query = if sets.is_empty() {
+            format!("MERGE (n:{} {{id: '{}'}})", label, id.replace('\'', "''"))
+        } else {
+            format!(
+                "MERGE (n:{} {{id: '{}'}}) ON CREATE SET {} ON MATCH SET {}",
+                label,
+                id.replace('\'', "''"),
+                sets.join(", "),
+                sets.join(", "),
+            )
+        };
+
+        self.execute(&query).await?;
+        Ok(())
+    }
+
+    async fn create_relationship(
+        &self,
+        from_id: &str,
+        to_id:   &str,
+        rel:     &str,
+        props:   Option<JsValue>,
+    ) -> Result<(), JsValue> {
+        let mut q = format!(
+            "MATCH (a), (b) WHERE a.id = '{}' AND b.id = '{}' MERGE (a)-[r:{}]->(b)",
+            from_id.replace('\'', "''"),
+            to_id.replace('\'', "''"),
+            rel,
+        );
+        if let Some(p) = props {
+            let pm: HashMap<String, serde_json::Value> =
+                serde_wasm_bindgen::from_value(p)
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let sets: Vec<String> = pm.iter().map(|(k, v)| {
+                let fv = match v {
+                    serde_json::Value::String(s)  => format!("'{}'", s.replace('\'', "''")),
+                    serde_json::Value::Number(n)  => n.to_string(),
+                    serde_json::Value::Bool(b)    => b.to_string(),
+                    _                             => "NULL".to_string(),
+                };
+                format!("r.{} = {}", k, fv)
+            }).collect();
+            if !sets.is_empty() {
+                q.push_str(&format!(" ON CREATE SET {} ON MATCH SET {}", sets.join(", "), sets.join(", ")));
+            }
+        }
+        self.execute(&q).await?;
+        Ok(())
+    }
+}
+
 #[wasm_bindgen]
 pub struct GraphBuilder { 
     #[wasm_bindgen(skip)]
@@ -491,9 +483,9 @@ pub struct GraphBuilder {
 
 #[wasm_bindgen]
 impl GraphBuilder {
-    #[wasm_bindgen(constructor)]
-    pub async fn new() -> Result<GraphBuilder, JsValue> {
-        Ok(Self { db: GraphDatabase::new(None).await? })
+    #[wasm_bindgen]
+    pub async fn create() -> Result<GraphBuilder, JsValue> {
+        Ok(Self { db: GraphDatabase::open(None).await? })
     }
 
     pub async fn build_from_parsed(&self, parsed_js: JsValue) -> Result<JsResult, JsValue> {
@@ -563,7 +555,10 @@ impl GraphBuilder {
             "edges": total_rels
         }).to_string()))
     }
+}
 
+// Internal methods for GraphBuilder
+impl GraphBuilder {
     async fn resolve_calls(&self, files: &[ParsedFile]) -> Result<(), JsValue> {
         let mut sym_index: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
         for f in files {
