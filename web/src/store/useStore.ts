@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import { runFullAnalysis, initGitNexus, getGitNexus } from '../wasm/bridge';
 import {
   saveRepoMeta, loadRepoMeta, saveGraphSnapshot, loadGraphSnapshot,
-  RepoMeta, GraphSnapshot,
+  RepoMeta,
 } from '../wasm/persistence';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -54,12 +54,15 @@ interface GitNexusState {
   setGraphData:   (d: any | null)       => void;
   setSelectedNode:(n: any | null)       => void;
   setAnalyzing:   (v: boolean)          => void;
+  setEngine:      (e: any)              => void;
   setProgress:    (p: ProgressState | null) => void;
 
   importDirectory:  ()                                => Promise<void>;
+  importFiles:      (files: FileList)                 => Promise<void>;
   analyzeRepo:      ()                                => Promise<void>;
   search:           (query: string)                   => Promise<any[]>;
   getContext:       (name: string)                    => Promise<any>;
+  getImpact:        (target: string, direction: string) => Promise<any>;
   saveState:        ()                                => Promise<void>;
   loadState:        (repoName: string)                => Promise<boolean>;
 }
@@ -77,6 +80,7 @@ export const useGitNexusStore = create<GitNexusState>((set, get) => ({
   setGraphData:    (d) => set({ graphData: d }),
   setSelectedNode: (n) => set({ selectedNode: n }),
   setAnalyzing:    (v) => set({ isAnalyzing: v }),
+  setEngine:       (_e) => { /* already handled by bridge.ts but satisfied here */ },
   setProgress:     (p) => set({ progress: p }),
 
   importDirectory: async () => {
@@ -96,6 +100,27 @@ export const useGitNexusStore = create<GitNexusState>((set, get) => ({
       });
     } catch (err) {
       console.error('Import failed:', err);
+    }
+  },
+
+  importFiles: async (files: FileList) => {
+    const engine = getGitNexus();
+    if (!engine) return;
+    try {
+      const result = await engine.import_from_files?.(files);
+      if (result?.success) {
+        const data = JSON.parse(result.data);
+        set({ 
+          currentRepo: {
+            name:      'dropped-files',
+            path:      '/',
+            files:     [],
+            isGitRepo: data.isGitRepo || false,
+          },
+        });
+      }
+    } catch (err) {
+      console.error('File import failed:', err);
     }
   },
 
@@ -138,6 +163,18 @@ export const useGitNexusStore = create<GitNexusState>((set, get) => ({
       const result = await engine.context(name, null);
       if (result.success) return JSON.parse(result.data);
     } catch (err) {}
+    return null;
+  },
+
+  getImpact: async (target: string, direction: string) => {
+    const engine = getGitNexus();
+    if (!engine) return null;
+    try {
+      const result = await engine.impact?.(target, direction, 3);
+      if (result?.success) return JSON.parse(result.data);
+    } catch (err) {
+      console.error('Impact failed:', err);
+    }
     return null;
   },
 

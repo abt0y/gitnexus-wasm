@@ -7,7 +7,7 @@ interface GraphViewProps {
   selectedNode: any;
 }
 
-export function GraphView({ data, onNodeClick, selectedNode }: GraphViewProps) {
+export function GraphView({ data, onNodeClick }: GraphViewProps) {
   const fgRef = useRef<any>(null);
   const [hoverNode, setHoverNode] = useState<any>(null);
 
