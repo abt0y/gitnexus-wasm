@@ -50,52 +50,35 @@ jobs:
           cd web
           npm ci
 
+      - name: Setup emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.53 # Stable version for tree-sitter
+
       - name: Build Tree-sitter Parsers to WASM
         run: |
           mkdir -p web/public/parsers
-
-          # Install tree-sitter CLI
           npm install -g tree-sitter-cli
 
           # Clone and build each grammar
           for lang in typescript python go rust java; do
             echo "Building $lang parser..."
-
-            case $lang in
-              typescript)
-                REPO="tree-sitter/tree-sitter-typescript"
-                DIR="tsx"  # or "typescript"
-                ;;
-              python)
-                REPO="tree-sitter/tree-sitter-python"
-                DIR="."
-                ;;
-              go)
-                REPO="tree-sitter/tree-sitter-go"
-                DIR="."
-                ;;
-              rust)
-                REPO="tree-sitter/tree-sitter-rust"
-                DIR="."
-                ;;
-              java)
-                REPO="tree-sitter/tree-sitter-java"
-                DIR="."
-                ;;
-            esac
-
-            # Clone grammar repo
-            if [ ! -d "/tmp/tree-sitter-$lang" ]; then
-              git clone --depth 1 "https://github.com/$REPO.git" "/tmp/tree-sitter-$lang"
+            
+            # Special handling for typescript (multiple grammars in one repo)
+            if [ "$lang" == "typescript" ]; then
+                git clone --depth 1 https://github.com/tree-sitter/tree-sitter-typescript.git /tmp/ts
+                cd /tmp/ts/typescript
+                tree-sitter build --wasm
+                cp tree-sitter-typescript.wasm "$GITHUB_WORKSPACE/web/public/parsers/typescript.wasm"
+                cd "$GITHUB_WORKSPACE"
+            else
+                git clone --depth 1 "https://github.com/tree-sitter/tree-sitter-$lang.git" "/tmp/$lang"
+                cd "/tmp/$lang"
+                tree-sitter build --wasm
+                # Standard name is tree-sitter-{lang}.wasm
+                cp *.wasm "$GITHUB_WORKSPACE/web/public/parsers/$lang.wasm"
+                cd "$GITHUB_WORKSPACE"
             fi
-
-            # Build WASM parser
-            cd "/tmp/tree-sitter-$lang/$DIR"
-            tree-sitter build --wasm
-
-            # Copy to output
-            cp *.wasm "$GITHUB_WORKSPACE/web/public/parsers/$lang.wasm"
-            cd "$GITHUB_WORKSPACE"
           done
 
           ls -la web/public/parsers/

@@ -59,25 +59,9 @@ Deploying GitNexus to GitHub Pages is the recommended way to use the tool. It co
 
 ## 🛠️ Local Development
 
+### Getting Started (Local Development)
+
 ### Prerequisites
-
-- **Rust**: Install via [rustup](https://rustup.rs/) (v1.75+).
-- **Node.js**: v20+ (LTS recommended).
-- **wasm-pack**: `cargo install wasm-pack`.
-- **tree-sitter CLI**: `npm install -g tree-sitter-cli`.
-
-### Build & Run
-
-1. **Build the WASM Core**:
-   ```bash
-   cd crates/gitnexus-core
-   wasm-pack build --target web --out-dir ../../web/pkg --features "gitnexus-parse/web-tree-sitter"
-   ```
-
-2. **Setup the Frontend**:
-   ```bash
-   cd ../../web
-   npm install
    ```
 
 3. **Start Dev Server**:
