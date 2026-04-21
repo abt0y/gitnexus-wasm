@@ -131,6 +131,7 @@ impl GraphDatabase {
         wasm_bindgen_futures::JsFuture::from(promise).await
     }
 
+    #[wasm_bindgen(skip)]
     pub async fn query_internal(
         &self, cypher: &str,
     ) -> Result<Vec<HashMap<String, serde_json::Value>>, JsValue> {

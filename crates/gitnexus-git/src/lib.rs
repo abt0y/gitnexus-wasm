@@ -5,7 +5,6 @@
 
 use wasm_bindgen::prelude::*;
 use js_sys::{Promise, Reflect, Array, Object};
-use log::info;
 
 // ============================================================================
 // isomorphic-git Bridge
@@ -61,12 +60,15 @@ impl GitRepo {
 
             let promise = Promise::new(&mut |resolve, _reject| {
                 let closure = Closure::once_into_js(move || {
-                    resolve.call1(&JsValue::NULL, &JsValue::NULL).unwrap_or(JsValue::NULL);
+                    let _ = resolve.call1(&JsValue::NULL, &JsValue::NULL);
                 });
                 let _ = Reflect::set(&script, &"onload".into(), &closure);
             });
 
-            document.head().unwrap().append_child(&script)?;
+            // Fallback if head() is missing - use documentElement or find head by tag
+            let head = document.get_elements_by_tag_name("head").item(0)
+                .ok_or_else(|| JsValue::from_str("No <head> found"))?;
+            head.append_child(&script)?;
             wasm_bindgen_futures::JsFuture::from(promise).await?;
         }
 
