@@ -1,3 +1,4 @@
+pub mod hash;
 //! Shared types and utilities for GitNexus WASM
 //!
 //! This crate contains all data structures that cross the WASM/JS boundary,

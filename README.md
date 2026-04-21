@@ -1,196 +1,119 @@
 # GitNexus WASM 🚀
 
-> **Zero-server, browser-native code intelligence.**
+> **Secure, Browser-Native Code Intelligence.**
 > 
-> AI-powered knowledge graphs, semantic search, and impact analysis — running entirely in your browser via WebAssembly.
+> AI-powered knowledge graphs, semantic search, and impact analysis — running entirely in your browser via WebAssembly. No data ever leaves your machine.
 
-[![Deploy to GitHub Pages](https://github.com/abt0y/GitNexus/actions/workflows/deploy.yml/badge.svg)](https://github.com/abt0y/GitNexus/actions/workflows/deploy.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Deploy to GitHub Pages](https://github.com/abt0y/gitnexus-wasm/actions/workflows/deploy.yml/badge.svg)](https://github.com/abt0y/GitNexus/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-## ✨ Features
-
-- **🌐 100% Browser-Based** — No backend server, no data leaves your machine
-- **🧠 AI-Powered Analysis** — Knowledge graphs, community detection, process extraction
-- **🔍 Semantic Search** — Hybrid BM25 + vector search with ONNX Runtime Web
-- **⚡ Impact Analysis** — Upstream/downstream dependency tracing
-- **📊 Interactive Visualization** — Force-directed graph with 2D/3D views
-- **🔒 Privacy-First** — All code analysis happens locally in WASM
-- **📁 File System Access** — Direct directory access via modern browser APIs
-- **🆓 Free Hosting** — Deploy to GitHub Pages at zero cost
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    GitHub Pages (Static)                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐    │
-│  │  index.html │  │  app.wasm   │  │  tree-sitter/*.wasm│    │
-│  │  (shell)    │  │  (Rust core)│  │  (language parsers)│    │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐    │
-│  │ onnx/*.wasm │  │ kuzu.wasm   │  │  embedding model    │    │
-│  │ (inference) │  │ (graph DB)  │  │  (~20MB quantized)  │    │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Browser Runtime                          │
-│  - WASM execution (single-threaded + SIMD)                  │
-│  - IndexedDB / OPFS for persistent storage                    │
-│  - File System Access API for local repo import               │
-│  - Web Workers for background parsing                         │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 🚀 Quick Start
-
-### Visit the Hosted Version
-
-Simply open **[gitnexus.vercel.app](https://gitnexus.vercel.app)** (or your GitHub Pages URL) in a modern browser:
-
-1. Click **"Open Directory"** or **drag & drop** your code folder
-2. Click **"Analyze"** to build the knowledge graph
-3. Explore, search, and analyze your codebase!
-
-### Local Development
-
-```bash
-# Clone the repository
-git clone https://github.com/abt0y/GitNexus.git
-cd GitNexus
-
-# Install dependencies and build WASM
-cargo build --target wasm32-unknown-unknown
-
-# Build tree-sitter parsers
-./scripts/build-parsers.sh
-
-# Install web dependencies
-cd web && npm install
-
-# Start development server
-npm run dev
-```
-
-## 📦 Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Core Engine** | Rust → WASM (wasm-bindgen) |
-| **Parsing** | Tree-sitter grammars compiled to WASM |
-| **Graph DB** | KuzuDB WASM (in-memory + IndexedDB persistence) |
-| **Embeddings** | ONNX Runtime Web + all-MiniLM-L6-v2 (INT8) |
-| **Git** | isomorphic-git (pure JS, no native binary) |
-| **UI** | React 18 + Vite + Tailwind CSS v4 |
-| **Visualization** | react-force-graph-2d |
-| **Hosting** | GitHub Pages + GitHub Actions CI/CD |
-
-## 🔧 Supported Languages
-
-- **TypeScript / JavaScript** — Full AST extraction, imports, calls
-- **Python** — Functions, classes, imports, decorators
-- **Go** — Functions, methods, interfaces, structs
-- **Rust** — Functions, traits, impls, modules
-- **Java** — Classes, interfaces, methods, packages
-- **C / C++** — Functions, classes, namespaces
-- **C#** — Classes, interfaces, methods
-- **PHP** — Functions, classes, namespaces
-- **Swift** — Classes, functions, protocols
-- **Ruby** — Methods, classes, modules
-
-## 🧩 Crates
-
-```
-crates/
-├── gitnexus-shared/     # Shared types (nodes, relationships, search results)
-├── gitnexus-parse/      # Tree-sitter WASM parser integration
-├── gitnexus-graph/      # KuzuDB WASM graph database bindings
-├── gitnexus-embed/      # ONNX Runtime Web embedding engine
-├── gitnexus-git/        # isomorphic-git wrapper for browser
-└── gitnexus-core/       # Main orchestration engine (WASM entry point)
-```
-
-## 🔄 Comparison: Node.js vs WASM
-
-| Feature | Original (Node.js) | WASM Rewrite |
-|---------|-------------------|--------------|
-| **Install** | `npm install -g gitnexus` | Visit URL |
-| **Server** | Local Express on :4747 | None (browser-only) |
-| **Data Privacy** | Local processing | Local processing |
-| **Parsing Speed** | Fast (native) | ~2-5x slower |
-| **Memory Limit** | 8GB+ configurable | ~4GB (WASM 32-bit) |
-| **Embedding Speed** | Fast (ONNX native) | Slower (WASM ONNX) |
-| **Git Operations** | Native `child_process` | isomorphic-git (pure JS) |
-| **MCP Server** | stdio process | Not available (replace with in-browser chat) |
-| **Hosting Cost** | $0 (self-hosted) | $0 (GitHub Pages) |
-
-## 🛠️ Building from Source
-
-### Prerequisites
-
-- Rust 1.75+ with `wasm32-unknown-unknown` target
-- wasm-pack
-- Node.js 20+
-- tree-sitter CLI
-
-### Build Steps
-
-```bash
-# 1. Install Rust WASM target
-rustup target add wasm32-unknown-unknown
-
-# 2. Install wasm-pack
-curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-# 3. Build tree-sitter parsers
-./scripts/build-parsers.sh
-
-# 4. Quantize embedding model (optional, uses CDN fallback)
-python scripts/quantize-model.py
-
-# 5. Build Rust WASM core
-cd crates/gitnexus-core
-wasm-pack build --target web --out-dir ../../web/pkg
-
-# 6. Build and serve web UI
-cd ../../web
-npm install
-npm run dev
-```
-
-### Deploy to GitHub Pages
-
-1. Fork this repository
-2. Go to **Settings → Pages**
-3. Set source to **GitHub Actions**
-4. Push to `main` branch — CI will build and deploy automatically
-
-## 🧪 Testing
-
-```bash
-# Run Rust unit tests
-cargo test --workspace
-
-# Run WASM tests in browser
-wasm-pack test --headless --firefox
-
-# Run web UI tests
-cd web && npm test
-```
-
-## 📝 License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
-## 🙏 Acknowledgments
-
-- [KuzuDB](https://kuzudb.com/) — Graph database with WASM support
-- [Tree-sitter](https://tree-sitter.github.io/) — Parser generator framework
-- [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) — ML inference in browsers
-- [isomorphic-git](https://isomorphic-git.org/) — Pure JavaScript git implementation
-- [react-force-graph](https://github.com/vasturiano/react-force-graph) — Graph visualization
+GitNexus WASM is a complete rewrite of the original GitNexus engine, designed to run 100% client-side. It leverages the latest advancements in WebAssembly to provide high-performance code analysis without the need for a server.
 
 ---
 
-**Made with ❤️ and Rust.** No servers were harmed in the making of this tool.
+## ✨ Features
+
+- **🌐 100% Browser-Based**: No backend server required. Your privacy is guaranteed.
+- **🧠 Parallel Analysis**: Utilizes Web Workers for multi-threaded file parsing in the background.
+- **🔍 Hybrid Semantic Search**: Combines BM25 keyword matching with vector embeddings via ONNX Runtime Web.
+- **⚡ Impact Analysis**: Graph-based dependency tracing to visualize the side effects of code changes.
+- **📊 Interactive Visualization**: Explore your codebase through a dynamic force-directed relationship graph.
+- **🔒 Incremental Updates**: Smart hashing only re-analyzes files that have actually changed since your last session.
+
+---
+
+## 🏗️ How it Works
+
+GitNexus bridges several cutting-edge WASM technologies into a single cohesive engine:
+
+- **Rust Core**: Orchestrates analysis using high-performance Rust crates.
+- **KuzuDB WASM**: An embeddable graph database running inside your browser tab.
+- **Tree-sitter**: Language-specific grammars compiled to WASM for precise AST extraction.
+- **ONNX Runtime Web**: In-browser ML inference for semantic token embeddings.
+
+---
+
+## 🚀 Deployment Guide (GitHub Pages)
+
+Deploying GitNexus to GitHub Pages is the recommended way to use the tool. It costs $0 and ensures you always have access to your private analysis engine.
+
+### Step 1: Fork & Setup
+1. **Fork** this repository to your account.
+2. Navigate to your fork's **Settings** tab.
+3. Select **Pages** from the left sidebar.
+4. Under **Build and deployment > Source**, ensure **GitHub Actions** is selected.
+
+### Step 2: Automatic Build
+1. Once GitHub Actions is enabled, the pipeline in `.github/workflows/deploy.yml` will trigger automatically on your next push to `main`.
+2. The CI will:
+   - Build all Rust crates to WASM.
+   - Compile Tree-sitter parsers.
+   - Download and bundle the quantized MiniLM embedding model.
+   - Deploy the static Vite build to the `gh-pages` internal branch.
+
+### Step 3: Access
+1. Your site will be live at `https://<your-username>.github.io/<repo-name>/`.
+2. **IMPORTANT**: If you encounter issues with the graph database, ensure your hosting provider supports `Cross-Origin-Opener-Policy: same-origin`. GitHub Pages supports this by default for standard assets.
+
+---
+
+## 🛠️ Local Development
+
+### Prerequisites
+
+- **Rust**: Install via [rustup](https://rustup.rs/) (v1.75+).
+- **Node.js**: v20+ (LTS recommended).
+- **wasm-pack**: `cargo install wasm-pack`.
+- **tree-sitter CLI**: `npm install -g tree-sitter-cli`.
+
+### Build & Run
+
+1. **Build the WASM Core**:
+   ```bash
+   cd crates/gitnexus-core
+   wasm-pack build --target web --out-dir ../../web/pkg --features "gitnexus-parse/web-tree-sitter"
+   ```
+
+2. **Setup the Frontend**:
+   ```bash
+   cd ../../web
+   npm install
+   ```
+
+3. **Start Dev Server**:
+   ```bash
+   npm run dev
+   ```
+   Access the app at `http://localhost:5173`.
+
+---
+
+## 🔄 Comparison: Node.js vs WASM
+
+| Feature | Node.js (Original) | WASM (Current) |
+| :--- | :--- | :--- |
+| **Setup** | `npm install -g gitnexus` | Visit URL |
+| **Privacy** | Local file access | Local browser access |
+| **Concurrency** | OS Threads | Web Workers |
+| **Persistence** | SQLite / Local Files | IndexedDB / OPFS |
+| **Mobile Support** | No | Yes (Modern browsers) |
+| **Hosting Cost** | $0 (Self-hosted) | $0 (GitHub Pages) |
+
+---
+
+## 🧪 Testing
+
+We use dynamic testing across the Rust and JS boundaries:
+
+- **Rust Tests**: `cargo test --workspace`
+- **WASM Browser Tests**: `wasm-pack test --headless --firefox`
+- **Frontend Tests**: `cd web && npm test`
+
+---
+
+## 📝 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+**Made with ❤️ by the GitNexus Team.**
+_No servers were harmed (or even used) in the making of this tool._

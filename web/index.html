@@ -14,13 +14,17 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-text { font-size: 1.125rem; color: #94a3b8; }
     .loading-sub { font-size: 0.875rem; color: #64748b; }
+    /* Note: For SharedArrayBuffer support, serve with:
+       Cross-Origin-Opener-Policy: same-origin
+       Cross-Origin-Embedder-Policy: require-corp
+    */
   </style>
 </head>
 <body>
   <div id="loading">
     <div class="spinner"></div>
     <div class="loading-text">GitNexus</div>
-    <div class="loading-sub" id="loading-status">Initializing WASM runtime...</div>
+    <div class="loading-sub" id="loading-status">Starting Secure Code Intelligence Engine...</div>
   </div>
   <div id="root"></div>
 

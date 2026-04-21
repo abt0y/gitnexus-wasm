@@ -108,19 +108,12 @@ jobs:
           # Verify output
           ls -la ../../web/pkg/
 
-      - name: Download & Quantize Embedding Model
+      - name: Download Embedding Model Assets
         run: |
           mkdir -p web/public/assets
-
-          # Download ONNX model (simplified - in production, use HuggingFace or custom hosting)
-          # For now, we'll create a placeholder that loads from CDN at runtime
-          echo '{"modelUrl":"https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/ort/all-MiniLM-L6-v2/onnx/model_quantized.onnx","dim":384}' > web/public/assets/model-config.json
-
-          # In production, you'd:
-          # 1. Download from HuggingFace: xenova/all-MiniLM-L6-v2
-          # 2. Convert to ONNX using optimum
-          # 3. Quantize to INT8
-          # 4. Upload to release assets or CDN
+          curl -L "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/ort/all-MiniLM-L6-v2/onnx/model_quantized.onnx" -o web/public/assets/all-MiniLM-L6-v2-quantized.onnx
+          curl -L "https://huggingface.co/Xenova/all-MiniLM-L6-v2/raw/main/tokenizer.json" -o web/public/assets/tokenizer.json
+          ls -lh web/public/assets/
 
       - name: Build Web UI
         run: |
