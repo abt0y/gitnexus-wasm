@@ -27,14 +27,14 @@ use gitnexus_graph::{GraphDatabase, GraphBuilder};
 pub struct GitNexusEngine {
     parser: WasmParser,
     graph: Option<GraphDatabase>,
-    embedder: Option<serde_json::Value>, // Placeholder for embedding engine logic
+    _embedder: Option<serde_json::Value>, // Placeholder for embedding engine logic
     current_repo: Option<RepoState>,
 }
 
 pub struct RepoState {
-    name: String,
+    _name: String,
     files: Vec<FileEntry>,
-    hashes: HashMap<String, String>,
+    _hashes: HashMap<String, String>,
 }
 
 // ============================================================================
@@ -58,7 +58,7 @@ impl GitNexus {
         let engine = GitNexusEngine {
             parser: WasmParser::new(),
             graph: None,
-            embedder: None,
+            _embedder: None,
             current_repo: None,
         };
 
@@ -96,9 +96,9 @@ impl GitNexus {
         }
 
         let repo = RepoState {
-            name: repo_name.clone(),
+            _name: repo_name.clone(),
             files,
-            hashes,
+            _hashes: hashes,
         };
 
         self.engine.write().current_repo = Some(repo);

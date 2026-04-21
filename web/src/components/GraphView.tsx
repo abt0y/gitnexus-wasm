@@ -1,6 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { useGitNexusStore } from '../hooks/useStore';
 
 interface GraphViewProps {
   data: any;
@@ -13,7 +12,7 @@ export function GraphView({ data, onNodeClick, selectedNode }: GraphViewProps) {
   const [hoverNode, setHoverNode] = useState<any>(null);
 
   // Transform graph data for force-graph
-  const graphData = React.useMemo(() => {
+  const graphData = useMemo(() => {
     if (!data) return { nodes: [], links: [] };
 
     const nodes = data.nodes?.map((n: any) => ({

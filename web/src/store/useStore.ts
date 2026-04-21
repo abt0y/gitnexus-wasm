@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import { runFullAnalysis, initGitNexus, getGitNexus } from '../wasm/bridge';
 import {
   saveRepoMeta, loadRepoMeta, saveGraphSnapshot, loadGraphSnapshot,
-  hashFile, RepoMeta, GraphSnapshot,
+  RepoMeta, GraphSnapshot,
 } from '../wasm/persistence';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -33,6 +33,10 @@ export interface ProgressState {
   phase:   string;
   percent: number;
   message: string;
+  stats?: {
+    filesProcessed: number;
+    totalFiles: number;
+  };
 }
 
 // ── Store interface ──────────────────────────────────────────────────────────

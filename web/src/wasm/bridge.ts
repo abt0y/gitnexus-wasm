@@ -28,7 +28,7 @@ export async function initGitNexus(): Promise<any> {
   // 3. Construct and initialise engine
   const engine = new wasm.GitNexus();
   const initResult = await engine.init();
-  const data = JSON.parse(initResult.data);
+  const data = JSON.parse(initResult.data ?? '{}');
 
   if (!initResult.success) {
     throw new Error(data.error ?? 'GitNexus init failed');
@@ -47,6 +47,10 @@ export interface AnalysisProgress {
   phase: string;
   percent: number;
   message: string;
+  stats?: {
+    filesProcessed: number;
+    totalFiles: number;
+  };
 }
 
 /**

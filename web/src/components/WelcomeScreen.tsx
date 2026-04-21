@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { FolderOpen, FileUp, Github, Sparkles, Loader2 } from 'lucide-react';
-import { useGitNexusStore } from '../hooks/useStore';
+import { useState, useEffect } from 'react';
+import { FolderOpen, FileUp, Sparkles, Loader2 } from 'lucide-react';
+import { useGitNexusStore } from '../store/useStore';
 import { initGitNexus } from '../wasm/bridge';
 
 export function WelcomeScreen() {

@@ -1,6 +1,5 @@
-import React from 'react';
 import { Search, Settings, GitBranch, Database } from 'lucide-react';
-import { useGitNexusStore } from '../hooks/useStore';
+import { useGitNexusStore } from '../store/useStore';
 
 interface HeaderProps {
   onSearch: () => void;

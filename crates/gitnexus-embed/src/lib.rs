@@ -4,7 +4,7 @@
 //! Uses all-MiniLM-L6-v2 (384-dim) or similar lightweight models.
 
 use wasm_bindgen::prelude::*;
-use js_sys::{Promise, Reflect, Array, Object, Float32Array, BigInt64Array, BigInt};
+use js_sys::{Promise, Reflect, Array, Object, Float32Array, BigInt64Array};
 use web_sys::{Request, RequestInit, RequestMode, Response};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -79,7 +79,7 @@ impl EmbeddingEngine {
     }
 
     async fn fetch_asset(&self, url: &str) -> Result<String, JsValue> {
-        let mut opts = RequestInit::new();
+        let opts = RequestInit::new();
         opts.set_method("GET");
         opts.set_mode(RequestMode::Cors);
 

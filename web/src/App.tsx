@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { useGitNexusStore } from './hooks/useStore';
+import { useState, useCallback } from 'react';
+import { useGitNexusStore } from './store/useStore';
 import { Header } from './components/Header';
 import { FileTree } from './components/FileTree';
 import { GraphView } from './components/GraphView';

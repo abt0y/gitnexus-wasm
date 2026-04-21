@@ -1,6 +1,6 @@
-import React from 'react';
+import { useState } from 'react';
 import { Folder, FileCode, ChevronRight, ChevronDown } from 'lucide-react';
-import { useGitNexusStore } from '../hooks/useStore';
+import { useGitNexusStore } from '../store/useStore';
 
 export function FileTree() {
   const { currentRepo } = useGitNexusStore();
@@ -28,7 +28,7 @@ export function FileTree() {
 }
 
 function FileTreeItem({ file, depth }: { file: any; depth: number }) {
-  const [isOpen, setIsOpen] = React.useState(true);
+  const [isOpen, setIsOpen] = useState(true);
 
   const icon = file.isDirectory ? (
     <Folder className="w-4 h-4 text-accent" />

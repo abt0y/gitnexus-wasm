@@ -1,6 +1,5 @@
-import React from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
-import { useGitNexusStore } from '../hooks/useStore';
+import { useGitNexusStore } from '../store/useStore';
 
 export function ProgressModal() {
   const { progress } = useGitNexusStore();
@@ -44,7 +43,6 @@ export function ProgressModal() {
           {phases.map((phase, idx) => {
             const isComplete = idx < currentPhaseIndex;
             const isActive = idx === currentPhaseIndex;
-            const isPending = idx > currentPhaseIndex;
 
             return (
               <div

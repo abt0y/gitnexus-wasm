@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { Search, Loader2, FileCode, ArrowRight } from 'lucide-react';
-import { useGitNexusStore } from '../hooks/useStore';
+import { useGitNexusStore } from '../store/useStore';
 
 export function SearchPanel() {
   const [query, setQuery] = useState('');
@@ -8,7 +8,7 @@ export function SearchPanel() {
   const [isSearching, setIsSearching] = useState(false);
   const { search, setSelectedNode } = useGitNexusStore();
 
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
 

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, GitBranch, ArrowLeft, ArrowRight, Activity, Layers } from 'lucide-react';
-import { useGitNexusStore } from '../hooks/useStore';
+import { useState, useEffect } from 'react';
+import { X, ArrowLeft, ArrowRight, Activity } from 'lucide-react';
+import { useGitNexusStore } from '../store/useStore';
 
 interface ContextPanelProps {
   node: any;
