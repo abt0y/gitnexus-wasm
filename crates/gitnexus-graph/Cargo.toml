@@ -1,0 +1,23 @@
+[package]
+name = "gitnexus-graph"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+gitnexus-shared = { path = "../gitnexus-shared" }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true, features = ["console", "IdbFactory", "IdbDatabase", "IdbObjectStore", "IdbTransaction", "IdbRequest", "Storage"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+once_cell = { workspace = true }
+parking_lot = { workspace = true }
+
+# Kuzu WASM - using JS bindings via wasm-bindgen
+# In production, you'd use kuzu-wasm crate directly

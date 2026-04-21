@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitNexus - Zero-Server Code Intelligence</title>
+  <meta name="description" content="AI-powered code intelligence running entirely in your browser" />
+  <style>
+    /* Critical CSS for loading state */
+    body { margin: 0; background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; z-index: 9999; }
+    #loading.hidden { display: none; }
+    .spinner { width: 48px; height: 48px; border: 3px solid #334155; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 1.125rem; color: #94a3b8; }
+    .loading-sub { font-size: 0.875rem; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">GitNexus</div>
+    <div class="loading-sub" id="loading-status">Initializing WASM runtime...</div>
+  </div>
+  <div id="root"></div>
+
+  <!-- External libraries loaded dynamically -->
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

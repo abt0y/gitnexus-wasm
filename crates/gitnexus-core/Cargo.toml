@@ -1,0 +1,34 @@
+[package]
+name = "gitnexus-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+gitnexus-shared = { path = "../gitnexus-shared" }
+gitnexus-parse = { path = "../gitnexus-parse" }
+gitnexus-graph = { path = "../gitnexus-graph" }
+gitnexus-embed = { path = "../gitnexus-embed" }
+gitnexus-git = { path = "../gitnexus-git" }
+
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true, features = ["console", "Window", "FileSystemDirectoryHandle", "FileSystemFileHandle", "FileSystemGetFileOptions", "FileSystemGetDirectoryOptions", "FileSystemWritableFileStream", "File", "FileList", "FileReader", "HtmlInputElement", "DragEvent", "DataTransfer", "Storage", "StorageManager", "Navigator"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+wasm-logger = { workspace = true }
+console_error_panic_hook = { workspace = true }
+once_cell = { workspace = true }
+parking_lot = { workspace = true }
+
+[features]
+default = []

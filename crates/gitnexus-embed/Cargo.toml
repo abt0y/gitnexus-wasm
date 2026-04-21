@@ -1,0 +1,22 @@
+[package]
+name = "gitnexus-embed"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+gitnexus-shared = { path = "../gitnexus-shared" }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true, features = ["console", "Window", "Request", "RequestInit", "RequestMode", "Response", "Blob", "Url"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+once_cell = { workspace = true }
+
+# Tokenization - using a lightweight tokenizer
+# In production, you'd use tokenizers-rs compiled to WASM

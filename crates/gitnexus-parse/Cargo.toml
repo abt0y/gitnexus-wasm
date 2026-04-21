@@ -1,0 +1,30 @@
+[package]
+name = "gitnexus-parse"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+gitnexus-shared = { path = "../gitnexus-shared" }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true, features = ["console", "File", "FileReader", "FileList", "HtmlInputElement", "DragEvent", "DataTransfer"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+once_cell = { workspace = true }
+
+# Tree-sitter WASM bindings
+# We use web-tree-sitter which provides JS bindings we call via wasm-bindgen
+
+[dependencies.web-tree-sitter-sg]
+version = "2.0"
+optional = true
+
+[features]
+default = ["web-tree-sitter"]
+web-tree-sitter = ["web-tree-sitter-sg"]
