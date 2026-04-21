@@ -94,7 +94,7 @@ jobs:
             tree-sitter build --wasm
 
             # Copy to output
-            cp "parser.wasm" "$GITHUB_WORKSPACE/web/public/parsers/$lang.wasm"
+            cp *.wasm "$GITHUB_WORKSPACE/web/public/parsers/$lang.wasm"
             cd "$GITHUB_WORKSPACE"
           done
 
