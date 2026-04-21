@@ -4,13 +4,11 @@
 //! Uses all-MiniLM-L6-v2 (384-dim) or similar lightweight models.
 
 use wasm_bindgen::prelude::*;
-use js_sys::{Function, Promise, Reflect, Array, Float32Array};
-use web_sys::{console, Request, RequestInit, RequestMode, Response};
+use js_sys::{Promise, Reflect, Array, Object, Float32Array, BigInt64Array, BigInt};
+use web_sys::{Request, RequestInit, RequestMode, Response};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use once_cell::sync::OnceCell;
-use log::{info, warn, error};
+use log::info;
 
 use gitnexus_shared::*;
 use gitnexus_tokenize::{CodeTokenizer, Encoding};
@@ -24,6 +22,16 @@ const MODEL_URL: &str = "./assets/all-MiniLM-L6-v2-quantized.onnx";
 const TOKENIZER_URL: &str = "./assets/tokenizer.json";
 const EMBEDDING_DIM: usize = 384;
 const MAX_SEQ_LENGTH: usize = 512;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingProgress {
+    pub phase: String,
+    pub percent: u8,
+    pub nodes_processed: Option<u32>,
+    pub total_nodes: Option<u32>,
+    pub error: Option<String>,
+}
 
 #[wasm_bindgen]
 pub struct EmbeddingEngine {
@@ -72,8 +80,8 @@ impl EmbeddingEngine {
 
     async fn fetch_asset(&self, url: &str) -> Result<String, JsValue> {
         let mut opts = RequestInit::new();
-        opts.method("GET");
-        opts.mode(RequestMode::Cors);
+        opts.set_method("GET");
+        opts.set_mode(RequestMode::Cors);
 
         let request = Request::new_with_str_and_init(url, &opts)?;
         let window = web_sys::window().unwrap();
@@ -103,12 +111,15 @@ impl EmbeddingEngine {
 
         let promise = Promise::new(&mut |resolve, _reject| {
             let closure = Closure::once_into_js(move || {
-                resolve.call0(&JsValue::NULL).unwrap_or(JsValue::NULL);
+                let _ = resolve.call0(&JsValue::NULL);
             });
             let _ = Reflect::set(&script, &"onload".into(), &closure);
         });
 
-        document.head().unwrap().append_child(&script)?;
+        // Use querySelector for robustness
+        let head = document.query_selector("head")?
+            .ok_or_else(|| JsValue::from_str("No <head> found"))?;
+        head.append_child(&script)?;
         wasm_bindgen_futures::JsFuture::from(promise).await?;
 
         let ort = Reflect::get(&window, &"ort".into())?;
@@ -124,7 +135,7 @@ impl EmbeddingEngine {
         Ok(ort)
     }
 
-    fn create_session_options(&self, ort: &JsValue) -> Result<JsValue, JsValue> {
+    fn create_session_options(&self, _ort: &JsValue) -> Result<JsValue, JsValue> {
         let eps = Array::new();
         eps.push(&"wasm".into());
 
@@ -198,9 +209,9 @@ impl EmbeddingEngine {
         let ort = Reflect::get(&window, &"ort".into())?;
         let tensor_class: js_sys::Function = Reflect::get(&ort, &"Tensor".into())?.dyn_into()?;
 
-        let bigint_array = js_sys::BigInt64Array::new_with_length(data.len() as u32);
+        let bigint_array = BigInt64Array::new_with_length(data.len() as u32);
         for (i, &val) in data.iter().enumerate() {
-            bigint_array.set_index(i as u32, js_sys::BigInt::from(val));
+            bigint_array.set_index(i as u32, val);
         }
 
         let shape_array = Array::new();
@@ -208,13 +219,18 @@ impl EmbeddingEngine {
             shape_array.push(&JsValue::from_f64(*dim as f64));
         }
 
-        let tensor = tensor_class.new2(&"int64".into(), &bigint_array.into(), &shape_array.into())?;
+        // Use Reflect.construct instead of function.new2
+        let args = Array::new();
+        args.push(&"int64".into());
+        args.push(&bigint_array.into());
+        args.push(&shape_array.into());
+        let tensor = Reflect::construct(&tensor_class, &args)?;
         Ok(tensor)
     }
 
     fn extract_embeddings(&self, tensor: &JsValue) -> Result<Vec<f32>, JsValue> {
         let data_val = Reflect::get(tensor, &"data".into())?;
-        let float_array = js_sys::Float32Array::from(&data_val);
+        let float_array: Float32Array = data_val.dyn_into().map_err(|_| JsValue::from_str("Not a Float32Array"))?;
 
         let mut embeddings = Vec::with_capacity(EMBEDDING_DIM);
         // Average pooling if it's (1, seq, dim)
@@ -234,13 +250,13 @@ impl EmbeddingEngine {
         Ok(embeddings)
     }
 
-    pub async fn embed_batch(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, JsValue> {
+    pub async fn embed_batch(&self, texts: Vec<String>) -> Result<JsValue, JsValue> {
         let mut results = Vec::new();
         for text in texts {
             let embedding = self.embed(&text).await?;
             results.push(embedding);
         }
-        Ok(results)
+        serde_wasm_bindgen::to_value(&results).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub fn is_ready(&self) -> bool {
@@ -266,7 +282,7 @@ impl TextChunker {
         Self { chunk_size, overlap }
     }
 
-    pub fn chunk(&self, text: &str) -> Vec<TextChunk> {
+    pub async fn chunk(&self, text: String) -> Result<JsValue, JsValue> {
         let words: Vec<&str> = text.split_whitespace().collect();
         let mut chunks = Vec::new();
         let mut start = 0;
@@ -279,8 +295,8 @@ impl TextChunker {
             chunks.push(TextChunk {
                 text: chunk_text,
                 chunk_index,
-                start_word: start,
-                end_word: end,
+                start_word: start as u32,
+                end_word: end as u32,
             });
 
             if end >= words.len() {
@@ -291,16 +307,17 @@ impl TextChunker {
             chunk_index += 1;
         }
 
-        chunks
+        serde_wasm_bindgen::to_value(&chunks).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TextChunk {
     pub text: String,
     pub chunk_index: u32,
-    pub start_word: usize,
-    pub end_word: usize,
+    pub start_word: u32,
+    pub end_word: u32,
 }
 
 #[wasm_bindgen]
@@ -341,9 +358,12 @@ impl EmbeddingPipeline {
             let label = node.get("label").and_then(|v| v.as_str()).unwrap_or("CodeElement");
 
             let embed_text = format!("{} {} {}", label, name, content);
-            let chunks = self.chunker.chunk(&embed_text);
+            
+            // Return JsValue for compatibility
+            let chunks_js = self.chunker.chunk(embed_text.clone()).await?;
+            let chunks: Vec<TextChunk> = serde_wasm_bindgen::from_value(chunks_js)?;
 
-            for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            for chunk in chunks {
                 let _embedding = self.engine.embed(&chunk.text).await?;
                 // TODO: Store in graph
             }

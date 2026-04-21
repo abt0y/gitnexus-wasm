@@ -6,9 +6,9 @@
 //!
 //! Reference: Blondel et al. (2008), "Fast unfolding of communities in large networks"
 
-use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+
+
 
 // ============================================================================
 // Public API
@@ -63,7 +63,7 @@ struct SparseGraph {
     /// adj[i] = list of (neighbour_index, weight)
     adj: Vec<Vec<(usize, f64)>>,
     /// Original string IDs (index → id)
-    node_ids: Vec<String>,
+    _node_ids: Vec<String>,
     total_weight: f64,
 }
 
@@ -167,7 +167,7 @@ fn local_phase(graph: &SparseGraph, community: &mut Vec<u32>, config: &LouvainCo
             }
 
             // Remove node from current community
-            let k_i_cur = neighbour_weights.get(&cur_comm).copied().unwrap_or(0.0);
+            let _k_i_cur = neighbour_weights.get(&cur_comm).copied().unwrap_or(0.0);
             *sigma_tot.entry(cur_comm).or_insert(0.0) -= k_i;
 
             // Find best community
@@ -238,7 +238,7 @@ fn aggregate(graph: &SparseGraph, community: &[u32]) -> (SparseGraph, Vec<u32>) 
         node_ids[*idx] = format!("SuperNode:{}", c);
     }
 
-    let super_graph = SparseGraph { adj, node_ids, total_weight: total };
+    let super_graph = SparseGraph { adj, _node_ids: node_ids, total_weight: total };
     let new_community: Vec<u32> = (0..k as u32).collect();
     (super_graph, new_community)
 }
@@ -296,7 +296,7 @@ fn build_graph(edges: &[(String, String, f64)]) -> SparseGraph {
         total += w;
     }
 
-    SparseGraph { adj, node_ids, total_weight: total }
+    SparseGraph { adj, _node_ids: node_ids, total_weight: total }
 }
 
 /// Map original string node IDs to final community IDs.
@@ -403,4 +403,4 @@ fn capitalize(s: &str) -> String {
     }
 }
 
-use std::cmp::Reverse;
+

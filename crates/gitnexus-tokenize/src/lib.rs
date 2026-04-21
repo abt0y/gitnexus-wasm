@@ -6,7 +6,7 @@ pub mod bpe;
 
 use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
 use bpe::BpeProcessor;
 
 #[wasm_bindgen]

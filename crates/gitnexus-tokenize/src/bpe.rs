@@ -3,7 +3,7 @@
 //! Designed to load HuggingFace `tokenizer.json` and perform subword tokenization.
 
 use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -18,7 +18,7 @@ pub struct BpeProcessor {
     vocab: HashMap<String, u32>,
     merges: HashMap<(String, String), u32>,
     unk_token: String,
-    special_tokens: HashMap<String, u32>,
+    _special_tokens: HashMap<String, u32>,
 }
 
 #[derive(Deserialize)]
@@ -31,7 +31,7 @@ struct TokenizerJson {
 #[derive(Deserialize)]
 struct ModelJson {
     #[serde(rename = "type")]
-    model_type: String, // "BPE" or "WordPiece"
+    _model_type: String, // "BPE" or "WordPiece"
     vocab: HashMap<String, u32>,
     merges: Option<Vec<String>>,
     unk_token: Option<String>,
@@ -66,7 +66,7 @@ impl BpeProcessor {
             vocab: decoded.model.vocab,
             merges,
             unk_token: decoded.model.unk_token.unwrap_or_else(|| "[UNK]".to_string()),
-            special_tokens,
+            _special_tokens: special_tokens,
         })
     }
 

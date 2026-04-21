@@ -9,9 +9,9 @@ pub mod vector;
 
 use wasm_bindgen::prelude::*;
 use js_sys::{Promise, Reflect, Array, Object};
-use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
-use log::{info, warn};
+use log::info;
 
 use gitnexus_shared::*;
 use louvain::{LouvainConfig, detect_communities};
