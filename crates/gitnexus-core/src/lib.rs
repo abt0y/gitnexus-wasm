@@ -83,7 +83,7 @@ impl GitNexus {
     pub async fn import_from_handle(&self, handle: JsValue) -> Result<JsResult, JsValue> {
         let dir_handle = Object::from(handle);
         let mut files = Vec::new();
-        self.read_directory_recursive(&dir_handle, "", &mut files).await?;
+        self.read_directory_iterative(dir_handle.clone(), &mut files).await?;
 
         let repo_name = Reflect::get(&dir_handle, &"name".into())?
             .as_string().unwrap_or_default();
@@ -109,51 +109,54 @@ impl GitNexus {
         }).to_string()))
     }
 
-    async fn read_directory_recursive(
+    async fn read_directory_iterative(
         &self,
-        dir_handle: &Object,
-        path_prefix: &str,
+        root_handle: Object,
         files: &mut Vec<FileEntry>,
     ) -> Result<(), JsValue> {
-        let entries_method: js_sys::Function = Reflect::get(dir_handle, &"entries".into())?.dyn_into()?;
-        let entries_async_iter = entries_method.call0(dir_handle)?;
+        let mut stack = vec![(root_handle, String::new())];
 
-        loop {
-            let next_method: js_sys::Function = Reflect::get(&entries_async_iter, &"next".into())?.dyn_into()?;
-            let next_promise: Promise = next_method.call0(&entries_async_iter)?.dyn_into()?;
-            let next_result = wasm_bindgen_futures::JsFuture::from(next_promise).await?;
+        while let Some((dir_handle, path_prefix)) = stack.pop() {
+            let entries_method: js_sys::Function = Reflect::get(&dir_handle, &"entries".into())?.dyn_into()?;
+            let entries_async_iter = entries_method.call0(&dir_handle)?;
 
-            if Reflect::get(&next_result, &"done".into())?.as_bool().unwrap_or(true) {
-                break;
-            }
+            loop {
+                let next_method: js_sys::Function = Reflect::get(&entries_async_iter, &"next".into())?.dyn_into()?;
+                let next_promise: Promise = next_method.call0(&entries_async_iter)?.dyn_into()?;
+                let next_result = wasm_bindgen_futures::JsFuture::from(next_promise).await?;
 
-            let entry = Reflect::get(&next_result, &"value".into())?;
-            let entry_array = js_sys::Array::from(&entry);
-            let name = entry_array.get(0).as_string().unwrap_or_default();
-            let handle = entry_array.get(1);
-            let kind = Reflect::get(&handle, &"kind".into())?.as_string().unwrap_or_default();
+                if Reflect::get(&next_result, &"done".into())?.as_bool().unwrap_or(true) {
+                    break;
+                }
 
-            if name == ".git" || name == "node_modules" || name == "dist" || name == "target" {
-                continue;
-            }
+                let entry = Reflect::get(&next_result, &"value".into())?;
+                let entry_array = js_sys::Array::from(&entry);
+                let name = entry_array.get(0).as_string().unwrap_or_default();
+                let handle = entry_array.get(1);
+                let kind = Reflect::get(&handle, &"kind".into())?.as_string().unwrap_or_default();
 
-            let full_path = if path_prefix.is_empty() { name } else { format!("{}/{}", path_prefix, name) };
+                if name == ".git" || name == "node_modules" || name == "dist" || name == "target" {
+                    continue;
+                }
 
-            if kind == "directory" {
-                self.read_directory_recursive(&Object::from(handle), &full_path, files).await?;
-            } else {
-                let get_file_method: js_sys::Function = Reflect::get(&handle, &"getFile".into())?.dyn_into()?;
-                let file_promise: Promise = get_file_method.call0(&handle)?.dyn_into()?;
-                let file: File = wasm_bindgen_futures::JsFuture::from(file_promise).await?.dyn_into()?;
-                let content = self.read_file_text(&file).await?;
+                let full_path = if path_prefix.is_empty() { name } else { format!("{}/{}", path_prefix, name) };
 
-                files.push(FileEntry {
-                    path: full_path,
-                    name: file.name(),
-                    is_directory: false,
-                    content: Some(content),
-                    size: Some(file.size() as u64),
-                });
+                if kind == "directory" {
+                    stack.push((Object::from(handle), full_path));
+                } else {
+                    let get_file_method: js_sys::Function = Reflect::get(&handle, &"getFile".into())?.dyn_into()?;
+                    let file_promise: Promise = get_file_method.call0(&handle)?.dyn_into()?;
+                    let file: web_sys::File = wasm_bindgen_futures::JsFuture::from(file_promise).await?.dyn_into()?;
+                    let content = self.read_file_text(&file).await?;
+
+                    files.push(FileEntry {
+                        path: full_path,
+                        name: file.name(),
+                        is_directory: false,
+                        content: Some(content),
+                        size: Some(file.size() as u64),
+                    });
+                }
             }
         }
         Ok(())
