@@ -4,13 +4,8 @@
 //! Supports: clone, status, diff, log, branch detection
 
 use wasm_bindgen::prelude::*;
-use js_sys::{Function, Promise, Reflect, Array, Object};
-use web_sys::console;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use log::{info, warn, error};
-
-use gitnexus_shared::*;
+use js_sys::{Promise, Reflect, Array, Object};
+use log::info;
 
 // ============================================================================
 // isomorphic-git Bridge
@@ -20,11 +15,11 @@ use gitnexus_shared::*;
 #[wasm_bindgen]
 pub struct GitRepo {
     #[wasm_bindgen(skip)]
-    dir: String,           // Directory handle or path
+    pub dir: String,           // Directory handle or path
     #[wasm_bindgen(skip)]
-    is_bare: bool,
+    pub is_bare: bool,
     #[wasm_bindgen(skip)]
-    git_instance: JsValue, // isomorphic-git instance
+    pub git_instance: JsValue, // isomorphic-git instance
 }
 
 #[wasm_bindgen]
@@ -66,7 +61,7 @@ impl GitRepo {
 
             let promise = Promise::new(&mut |resolve, _reject| {
                 let closure = Closure::once_into_js(move || {
-                    resolve.call0(&JsValue::NULL).unwrap_or(JsValue::NULL);
+                    resolve.call1(&JsValue::NULL, &JsValue::NULL).unwrap_or(JsValue::NULL);
                 });
                 let _ = Reflect::set(&script, &"onload".into(), &closure);
             });
@@ -147,7 +142,10 @@ impl GitRepo {
         let window = web_sys::window().ok_or("No window")?;
         let lightning_fs = Reflect::get(&window, &"LightningFS".into())?;
         let fs_class: js_sys::Function = lightning_fs.dyn_into()?;
-        let fs_instance = fs_class.new1(&JsValue::from_str("gitnexus-fs"))?;
+        
+        let args = Array::new();
+        args.push(&JsValue::from_str("gitnexus-fs"));
+        let fs_instance = Reflect::construct(&fs_class, &args)?;
         Ok(fs_instance)
     }
 

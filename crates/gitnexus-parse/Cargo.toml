@@ -17,6 +17,8 @@ serde-wasm-bindgen = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }
+console_error_panic_hook = { workspace = true }
+wasm-logger = { workspace = true }
 
 # Tree-sitter WASM bindings
 # We use web-tree-sitter which provides JS bindings we call via wasm-bindgen

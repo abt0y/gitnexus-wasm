@@ -8,11 +8,13 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 // ============================================================================
 // Public API
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LouvainConfig {
     /// Resolution parameter γ (default 1.0)
     pub resolution: f64,

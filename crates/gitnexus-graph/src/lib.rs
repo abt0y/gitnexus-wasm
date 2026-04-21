@@ -25,16 +25,16 @@ use vector::{BruteForceIndex, VectorEntry, reciprocal_rank_fusion};
 #[wasm_bindgen]
 pub struct GraphDatabase {
     #[wasm_bindgen(skip)]
-    db: JsValue,
+    pub db: JsValue,
     #[wasm_bindgen(skip)]
-    conn: JsValue,
+    pub conn: JsValue,
     #[wasm_bindgen(skip)]
-    in_memory: bool,
+    pub in_memory: bool,
     #[wasm_bindgen(skip)]
-    schema_initialized: bool,
+    pub schema_initialized: bool,
     /// In-memory vector index (Task 5 fallback)
     #[wasm_bindgen(skip)]
-    vector_index: BruteForceIndex,
+    pub vector_index: BruteForceIndex,
 }
 
 #[wasm_bindgen]
@@ -57,13 +57,17 @@ impl GraphDatabase {
 
         let db_instance = if let Some(path) = db_path.clone() {
             info!("Opening persistent KuzuDB at: {}", path);
-            db_class.new1(&JsValue::from_str(&path))?
+            let args = Array::new();
+            args.push(&JsValue::from_str(&path));
+            Reflect::construct(&db_class, &args)?
         } else {
             info!("Creating in-memory KuzuDB");
-            db_class.new0()?
+            Reflect::construct(&db_class, &Array::new())?
         };
 
-        let conn_instance = conn_class.new1(&db_instance)?;
+        let conn_args = Array::new();
+        conn_args.push(&db_instance);
+        let conn_instance = Reflect::construct(&conn_class, &conn_args)?;
 
         let mut graph = GraphDatabase {
             db: db_instance,
@@ -127,7 +131,7 @@ impl GraphDatabase {
         wasm_bindgen_futures::JsFuture::from(promise).await
     }
 
-    pub async fn query(
+    pub async fn query_internal(
         &self, cypher: &str,
     ) -> Result<Vec<HashMap<String, serde_json::Value>>, JsValue> {
         let result = self.execute(cypher).await?;
@@ -142,20 +146,18 @@ impl GraphDatabase {
             let row_obj = Object::from(row);
             let mut map = HashMap::new();
             for key in Object::keys(&row_obj).iter() {
-                let key = key.as_string().unwrap_or_default();
-                let val = Reflect::get(&row_obj, &key.clone().into())?;
+                let key_str = key.as_string().unwrap_or_default();
+                let val = Reflect::get(&row_obj, &key.into())?;
+                
                 let jv = if val.is_string() {
                     serde_json::Value::String(val.as_string().unwrap_or_default())
-                } else if val.is_number() {
+                } else if let Some(n) = val.as_f64() {
                     serde_json::Value::Number(
-                        serde_json::Number::from_f64(val.as_f64().unwrap_or(0.0))
+                        serde_json::Number::from_f64(n)
                             .unwrap_or(serde_json::Number::from(0)),
                     )
-                } else if val.is_number() {
-                     // Handled by Number above but just in case
-                     serde_json::Value::Number(serde_json::Number::from_f64(val.as_f64().unwrap_or(0.0)).unwrap_or(serde_json::Number::from(0)))
-                } else if val.is_boolean() {
-                    serde_json::Value::Bool(val.as_bool().unwrap_or(false))
+                } else if let Some(b) = val.as_bool() {
+                    serde_json::Value::Bool(b)
                 } else if val.is_null() || val.is_undefined() {
                     serde_json::Value::Null
                 } else {
@@ -165,11 +167,16 @@ impl GraphDatabase {
                         .unwrap_or_else(|| "null".to_string());
                     serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)
                 };
-                map.insert(key, jv);
+                map.insert(key_str, jv);
             }
             out.push(map);
         }
         Ok(out)
+    }
+
+    pub async fn query(&self, cypher: &str) -> Result<JsValue, JsValue> {
+        let rows = self.query_internal(cypher).await?;
+        serde_wasm_bindgen::to_value(&rows).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub async fn create_node(&self, label: &str, properties: JsValue) -> Result<(), JsValue> {
@@ -248,7 +255,7 @@ impl GraphDatabase {
         let q = "MATCH (a)-[r:CodeRelation]->(b) \
                  RETURN a.id AS sourceId, b.id AS targetId, \
                         COALESCE(r.confidence, 0.5) AS confidence";
-        let rows = self.query(q).await?;
+        let rows = self.query_internal(q).await?;
 
         let edges: Vec<(String, String, f64)> = rows.iter().filter_map(|r| {
             let s = r.get("sourceId")?.as_str()?.to_owned();
@@ -301,7 +308,7 @@ impl GraphDatabase {
                         b.id AS targetId, b.name AS targetName, labels(b)[0] AS targetType, \
                         COALESCE(r.type, 'CALLS') AS relType, \
                         COALESCE(r.confidence, 0.5) AS confidence";
-        let rows = self.query(q).await?;
+        let rows = self.query_internal(q).await?;
         let (call_graph, meta) = build_graph_from_rows(&rows);
 
         let extractor = ProcessExtractor::new(config);
@@ -361,7 +368,7 @@ impl GraphDatabase {
              RETURN n.id AS id LIMIT {1}",
             safe, k * 2,
         );
-        let bm25_rows = self.query(&bm25_q).await?;
+        let bm25_rows = self.query_internal(&bm25_q).await?;
         let bm25_ids: Vec<String> = bm25_rows.iter()
             .filter_map(|r| r.get("id")?.as_str().map(str::to_owned))
             .collect();
@@ -385,7 +392,7 @@ impl GraphDatabase {
         ];
         for label in &labels {
             let q = format!("MATCH (n:{}) RETURN n.id AS id, n.name AS name, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine", label);
-            if let Ok(rows) = self.query(&q).await {
+            if let Ok(rows) = self.query_internal(&q).await {
                 for row in rows {
                     nodes.push(serde_json::json!({
                         "id":       row.get("id").cloned(),
@@ -406,7 +413,7 @@ impl GraphDatabase {
                             COALESCE(r.type, 'CALLS') AS type, \
                             COALESCE(r.confidence, 0.5) AS confidence";
         let mut rels: Vec<serde_json::Value> = Vec::new();
-        if let Ok(rows) = self.query(rel_q).await {
+        if let Ok(rows) = self.query_internal(rel_q).await {
             for row in rows {
                 let s = row.get("sourceId").and_then(|v| v.as_str()).unwrap_or("").to_owned();
                 let t = row.get("targetId").and_then(|v| v.as_str()).unwrap_or("").to_owned();
@@ -445,7 +452,7 @@ impl GraphDatabase {
              LIMIT {1}",
             safe, q.limit.unwrap_or(10)
         );
-        let rows = self.query(&cypher).await?;
+        let rows = self.query_internal(&cypher).await?;
         Ok(JsResult::ok(serde_json::to_string(&rows).unwrap()))
     }
 
@@ -455,7 +462,7 @@ impl GraphDatabase {
              "MATCH (n {{name: '{}'}}) RETURN n.id AS id, n.name AS name, labels(n)[0] AS kind, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.content AS content",
              safe
         );
-        let rows = self.query(&cypher).await?;
+        let rows = self.query_internal(&cypher).await?;
         if rows.is_empty() {
             return Ok(JsResult::err("Symbol not found".to_string()));
         }
@@ -476,7 +483,10 @@ impl GraphDatabase {
 }
 
 #[wasm_bindgen]
-pub struct GraphBuilder { db: GraphDatabase }
+pub struct GraphBuilder { 
+    #[wasm_bindgen(skip)]
+    pub db: GraphDatabase 
+}
 
 #[wasm_bindgen]
 impl GraphBuilder {
@@ -570,8 +580,6 @@ impl GraphBuilder {
         }
         Ok(())
     }
-
-    pub fn db(&self) -> &GraphDatabase { &self.db }
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]

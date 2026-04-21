@@ -18,6 +18,7 @@ thiserror = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
+console_error_panic_hook = { workspace = true }
 
 # Kuzu WASM - using JS bindings via wasm-bindgen
 # In production, you'd use kuzu-wasm crate directly

@@ -8,8 +8,7 @@
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use js_sys::{Function, Promise, Reflect};
-use web_sys::{console, File, FileReader};
+use js_sys::{Promise, Reflect, Array};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use log::info;
@@ -70,14 +69,14 @@ pub fn built_in_languages() -> Vec<LanguageConfig> {
             node_types: LanguageNodeTypes {
                 function: vec!["function_declaration", "arrow_function", "function"].iter().map(|s| s.to_string()).collect(),
                 class: vec!["class_declaration", "class"].iter().map(|s| s.to_string()).collect(),
-                interface: vec![].iter().map(|s| s.to_string()).collect(),
+                interface: vec!["no_interface"].iter().filter(|s| !s.is_empty()).map(|s| s.to_string()).collect(),
                 method: vec!["method_definition", "method"].iter().map(|s| s.to_string()).collect(),
-                struct_type: vec![].iter().map(|s| s.to_string()).collect(),
-                enum_type: vec![].iter().map(|s| s.to_string()).collect(),
+                struct_type: vec![].iter().map(|s: &&str| s.to_string()).collect(),
+                enum_type: vec![].iter().map(|s: &&str| s.to_string()).collect(),
                 import: vec!["import_statement", "import_declaration"].iter().map(|s| s.to_string()).collect(),
                 call: vec!["call_expression"].iter().map(|s| s.to_string()).collect(),
                 property: vec!["property_definition"].iter().map(|s| s.to_string()).collect(),
-                namespace: vec![].iter().map(|s| s.to_string()).collect(),
+                namespace: vec![].iter().map(|s: &&str| s.to_string()).collect(),
             },
         },
         LanguageConfig {
@@ -87,14 +86,14 @@ pub fn built_in_languages() -> Vec<LanguageConfig> {
             node_types: LanguageNodeTypes {
                 function: vec!["function_definition"].iter().map(|s| s.to_string()).collect(),
                 class: vec!["class_definition"].iter().map(|s| s.to_string()).collect(),
-                interface: vec![].iter().map(|s| s.to_string()).collect(),
+                interface: vec![].iter().map(|s: &&str| s.to_string()).collect(),
                 method: vec!["function_definition"].iter().map(|s| s.to_string()).collect(),
                 struct_type: vec!["dataclass"].iter().map(|s| s.to_string()).collect(),
                 enum_type: vec!["class_definition"].iter().map(|s| s.to_string()).collect(),
                 import: vec!["import_statement", "import_from_statement"].iter().map(|s| s.to_string()).collect(),
                 call: vec!["call"].iter().map(|s| s.to_string()).collect(),
                 property: vec!["attribute"].iter().map(|s| s.to_string()).collect(),
-                namespace: vec![].iter().map(|s| s.to_string()).collect(),
+                namespace: vec![].iter().map(|s: &&str| s.to_string()).collect(),
             },
         },
         LanguageConfig {
@@ -128,7 +127,7 @@ pub fn built_in_languages() -> Vec<LanguageConfig> {
                 import: vec!["import_declaration"].iter().map(|s| s.to_string()).collect(),
                 call: vec!["call_expression"].iter().map(|s| s.to_string()).collect(),
                 property: vec!["selector_expression"].iter().map(|s| s.to_string()).collect(),
-                namespace: vec![].iter().map(|s| s.to_string()).collect(),
+                namespace: vec![].iter().map(|s: &&str| s.to_string()).collect(),
             },
         },
         LanguageConfig {
@@ -160,11 +159,11 @@ pub fn built_in_languages() -> Vec<LanguageConfig> {
 pub struct TreeSitterLanguage {
     name: String,
     #[wasm_bindgen(skip)]
-    config: LanguageConfig,
+    pub config: LanguageConfig,
     #[wasm_bindgen(skip)]
-    parser: JsValue, // Tree-sitter Parser instance
+    pub parser: JsValue, // Tree-sitter Parser instance
     #[wasm_bindgen(skip)]
-    language: JsValue, // Tree-sitter Language instance
+    pub language: JsValue, // Tree-sitter Language instance
 }
 
 #[wasm_bindgen]
@@ -177,7 +176,8 @@ impl TreeSitterLanguage {
 /// Parser registry - holds loaded languages
 #[wasm_bindgen]
 pub struct ParserRegistry {
-    languages: HashMap<String, TreeSitterLanguage>,
+    #[wasm_bindgen(skip)]
+    pub languages: HashMap<String, TreeSitterLanguage>,
 }
 
 #[wasm_bindgen]
@@ -207,7 +207,7 @@ impl ParserRegistry {
         // Create Parser instance
         let parser_ctor = Reflect::get(&tree_sitter, &"Parser".into())?;
         let parser: js_sys::Function = parser_ctor.dyn_into()?;
-        let parser_instance = parser.new0()?;
+        let parser_instance = Reflect::construct(&parser, &Array::new())?;
 
         // Load language WASM
         let language_promise: Promise = {
@@ -242,11 +242,6 @@ impl ParserRegistry {
         self.languages.contains_key(lang_name)
     }
 
-    /// Get list of supported language names
-    pub fn supported_languages() -> Vec<String> {
-        built_in_languages().into_iter().map(|l| l.name).collect()
-    }
-
     /// Detect language from file extension
     pub fn detect_language(file_path: &str) -> Option<String> {
         let ext = file_path.split('.').last()?;
@@ -257,7 +252,7 @@ impl ParserRegistry {
     }
 
     /// Parse a file and extract symbols
-    pub fn parse_file(&self, file_path: &str, content: &str) -> Result<ParsedFile, JsValue> {
+    pub fn parse_file(&self, file_path: &str, content: &str) -> Result<JsValue, JsValue> {
         let lang_name = Self::detect_language(file_path)
             .ok_or_else(|| JsValue::from_str("Unsupported file type"))?;
 
@@ -279,13 +274,15 @@ impl ParserRegistry {
         // Walk the tree and extract nodes
         self.walk_tree(&root_node, content, &lang.config, &mut symbols, &mut imports, &mut calls, file_path)?;
 
-        Ok(ParsedFile {
+        let parsed = ParsedFile {
             file_path: file_path.to_string(),
             language: lang_name,
             symbols,
             imports,
             calls,
-        })
+        };
+        
+        serde_wasm_bindgen::to_value(&parsed).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     fn walk_tree(
@@ -486,7 +483,8 @@ pub struct CallSite {
 
 #[wasm_bindgen]
 pub struct WasmParser {
-    registry: ParserRegistry,
+    #[wasm_bindgen(skip)]
+    pub registry: ParserRegistry,
 }
 
 #[wasm_bindgen]
@@ -509,9 +507,7 @@ impl WasmParser {
     }
 
     pub fn parse(&self, file_path: &str, content: &str) -> Result<JsValue, JsValue> {
-        let parsed = self.registry.parse_file(file_path, content)?;
-        serde_wasm_bindgen::to_value(&parsed)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        self.registry.parse_file(file_path, content)
     }
 
     pub fn detect_language(file_path: &str) -> Option<String> {

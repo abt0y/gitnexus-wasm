@@ -121,10 +121,7 @@ impl ProcessExtractor {
 
             let outgoing = graph.get(&node_id);
             match outgoing {
-                None | Some(out) if out.is_empty() => {
-                    terminals.push(node_id.clone());
-                }
-                Some(out) => {
+                Some(out) if !out.is_empty() => {
                     for (target_id, rel_type, confidence) in out {
                         if *confidence >= self.config.min_confidence
                             && !visited.contains(target_id)
@@ -138,6 +135,9 @@ impl ProcessExtractor {
                             ));
                         }
                     }
+                }
+                _ => {
+                    terminals.push(node_id.clone());
                 }
             }
         }
